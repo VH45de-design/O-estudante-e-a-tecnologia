@@ -2,10 +2,11 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>SYSTEM_FAILURE: The Student's Loop</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM_FAILURE: THE STUDENT'S LOOP</title>
     <style>
         body {
-            background-color: #05050a;
+            background-color: #000;
             color: white;
             margin: 0;
             overflow: hidden;
@@ -16,8 +17,8 @@
             font-family: 'Courier New', Courier, monospace;
         }
         canvas {
-            border: 4px solid #333;
-            box-shadow: 0 0 20px rgba(0, 255, 100, 0.2);
+            border: 2px solid #333;
+            box-shadow: 0 0 30px rgba(0, 255, 100, 0.3);
             image-rendering: pixelated;
         }
     </style>
@@ -27,196 +28,277 @@
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <script>
+/**
+ * SYSTEM_FAILURE: THE STUDENT'S LOOP
+ * Um RPG de tecnologia inspirado em Undertale.
+ */
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// --- ESTADOS E VARIÁVEIS ---
-let state = "INTRO";
-let playerName = "";
+// --- CONFIGURAÇÕES E ESTADO DO JOGO ---
+let state = "INTRO"; // INTRO, MENU, EXPLORE, BATTLE, GAMEOVER
+let currentRoom = 0;
+let frame = 0;
 let introTimer = 0;
-let frameCount = 0;
-let selectedBtn = 0;
-let playerPos = { x: 400, y: 500 };
-let enemyHp = 100;
-let playerHp = 20;
-let atk = 5;
-let hasRoot = false;
-let dialogue = { text: "", active: false, counter: 0 };
-let keys = {};
+let playerName = "";
+let karma = 0; // > 0: Pacifista (Debug), < 0: Genocida (Compile)
 
-// --- INPUTS ---
+const player = {
+    pos: { x: 400, y: 500 },
+    hp: 20,
+    maxHp: 20,
+    atk: 5,
+    hasRoot: false,
+    speed: 4
+};
+
+const enemy = {
+    name: "FIREWALL_v1.0",
+    hp: 120,
+    maxHp: 120,
+    color: "#ff3333"
+};
+
+const dialogue = {
+    text: "",
+    display: "",
+    counter: 0,
+    active: false,
+    callback: null
+};
+
+let keys = {};
+let selectedBtn = 0;
+
+// --- LISTENERS ---
 window.addEventListener("keydown", e => {
     keys[e.key] = true;
     
     if (state === "MENU") {
         if (e.key === "Enter" && playerName.length > 0) state = "EXPLORE";
         if (e.key === "Backspace") playerName = playerName.slice(0, -1);
-        if (e.key.length === 1 && playerName.length < 10) playerName += e.key;
+        if (e.key.length === 1 && playerName.length < 10 && /[a-zA-Z0-9]/.test(e.key)) playerName += e.key;
     }
 
     if (state === "BATTLE" && !dialogue.active) {
         if (e.key === "ArrowLeft") selectedBtn = (selectedBtn - 1 + 4) % 4;
         if (e.key === "ArrowRight") selectedBtn = (selectedBtn + 1) % 4;
-        if (e.key === "z") startBattleAction();
+        if (e.key === "z") handleBattleAction();
     }
 
-    if (dialogue.active && e.key === "x") dialogue.active = false;
+    if (dialogue.active && e.key === "x") {
+        dialogue.active = false;
+        if (dialogue.callback) dialogue.callback();
+    }
 });
 window.addEventListener("keyup", e => keys[e.key] = false);
 
-// --- FUNÇÕES DE DESENHO ---
-
-function drawText(txt, x, y, size = "20px", color = "white", align = "left") {
-    ctx.fillStyle = color;
-    ctx.font = `${size} 'Courier New'`;
-    ctx.textAlign = align;
-    ctx.fillText(txt, x, y);
-}
-
-function startBattleAction() {
-    if (selectedBtn === 0) { // COMPILAR
-        enemyHp -= atk;
-        startDialogue(`Você compilou o código hostil! Causou ${atk} de dano.`);
-    } else if (selectedBtn === 1) { // DEBUGAR
-        startDialogue("Você analisou o log de erros. O Firewall parece confuso.");
-    } else if (selectedBtn === 3) { // LOGOUT
-        if (enemyHp < 50) {
-            startDialogue("Sessão encerrada. Você salvou o sistema pacificamente.");
-            setTimeout(() => location.reload(), 3000);
-        } else {
-            startDialogue("Erro: O processo ainda está em execução crítica.");
-        }
-    }
-}
-
-function startDialogue(txt) {
-    dialogue.text = txt;
-    dialogue.counter = 0;
-    dialogue.active = true;
-}
+// --- FUNÇÕES DE DESENHO (GRÁFICOS PROCEDURAIS) ---
 
 function drawStudent(x, y) {
-    let bob = Math.sin(frameCount * 0.1) * 3;
-    ctx.fillStyle = "#46465a"; ctx.fillRect(x, y + 10 + bob, 30, 30); // Corpo
-    ctx.fillStyle = "#ffcc96"; ctx.fillRect(x + 5, y + bob, 20, 15);  // Cabeça
-    ctx.fillStyle = "black"; ctx.fillRect(x + 8, y + 7 + bob, 4, 3);   // Olho
-    ctx.fillStyle = "black"; ctx.fillRect(x + 18, y + 7 + bob, 4, 3);  // Olho
+    let bob = Math.sin(frame * 0.1) * 3;
+    ctx.fillStyle = "#4a4e69"; ctx.fillRect(x, y + 12 + bob, 30, 28); // Moletom
+    ctx.fillStyle = "#ffdbac"; ctx.fillRect(x + 5, y + bob, 20, 16);  // Rosto
+    ctx.fillStyle = "#222"; ctx.fillRect(x + 5, y + bob, 20, 6);     // Cabelo
+    ctx.fillStyle = "#000"; ctx.fillRect(x + 8, y + 9 + bob, 4, 3);   // Olho L
+    ctx.fillStyle = "#000"; ctx.fillRect(x + 18, y + 9 + bob, 4, 3);  // Olho R
+    ctx.fillStyle = "#ff3333"; ctx.fillRect(x - 4, y + 15 + bob, 8, 20); // Mochila
 }
 
-function drawProf(x, y) {
-    let float = Math.sin(frameCount * 0.05) * 10;
-    ctx.fillStyle = "#f5f5dc"; ctx.fillRect(x, y + float, 50, 45); // Monitor
-    ctx.fillStyle = "#002800"; ctx.fillRect(x + 5, y + 5 + float, 40, 30); // Tela
-    ctx.fillStyle = "#00ff64"; drawText(":)", x + 25, y + 25 + float, "20px", "#00ff64", "center");
+function drawPROF(x, y) {
+    let float = Math.sin(frame * 0.05) * 10;
+    ctx.fillStyle = "#dcdcb4"; ctx.fillRect(x, y + float, 60, 55); // Carcaça
+    ctx.fillStyle = "#002200"; ctx.fillRect(x + 6, y + 6 + float, 48, 35); // Tela
+    ctx.fillStyle = "#00ff66";
+    ctx.font = "14px Courier New";
+    ctx.fillText("P.R.O.F", x + 10, y + 25 + float); // Rosto Digital
+}
+
+function drawFirewall(x, y) {
+    ctx.strokeStyle = "#ff3333";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        let angle = (i * Math.PI) / 3 + (frame * 0.02);
+        let px = x + 50 * Math.cos(angle);
+        let py = y + 50 * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+    ctx.fill();
 }
 
 function drawScanlines() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
     for (let i = 0; i < 600; i += 4) ctx.fillRect(0, i, 800, 2);
 }
 
-// --- LOOP PRINCIPAL ---
+// --- LÓGICA DE BATALHA ---
 
-function update() {
-    frameCount++;
+function handleBattleAction() {
+    const btns = ["COMPILAR", "DEBUGAR", "MEMÓRIA", "LOGOUT"];
+    let action = btns[selectedBtn];
 
-    if (state === "INTRO") {
-        introTimer++;
-        if (introTimer > 600) state = "MENU";
-    }
-
-    if (state === "EXPLORE" && !dialogue.active) {
-        if (keys["ArrowLeft"]) playerPos.x -= 4;
-        if (keys["ArrowRight"]) playerPos.x += 4;
-        if (keys["ArrowUp"]) playerPos.y -= 4;
-        if (keys["ArrowDown"]) playerPos.y += 4;
-
-        // Colisão com P.R.O.F
-        let dist = Math.hypot(playerPos.x - 400, playerPos.y - 200);
-        if (dist < 50 && !hasRoot) {
-            hasRoot = true;
-            atk = 40;
-            startDialogue("P.R.O.F: Pegue o ACESSO ROOT! Use o botão COMPILAR para salvar seu TCC!");
+    if (action === "COMPILAR") {
+        enemy.hp -= player.atk;
+        karma -= 1;
+        startDialogue(`Você compilou o código hostil causando ${player.atk} de dano!`, () => {
+            if (enemy.hp <= 0) winGame();
+        });
+    } else if (action === "DEBUGAR") {
+        karma += 1;
+        startDialogue("Você comentou as linhas agressivas do Firewall. Ele está lento.");
+    } else if (action === "LOGOUT") {
+        if (karma > 2 || enemy.hp < 40) {
+            startDialogue("Você encerrou a sessão pacificamente. O sistema está salvo.", () => location.reload());
+        } else {
+            startDialogue("ERRO: Logout negado. O processo ainda é uma ameaça.");
         }
-
-        if (playerPos.y < 50) state = "BATTLE";
     }
 }
 
-function draw() {
+function startDialogue(txt, cb = null) {
+    dialogue.text = txt;
+    dialogue.counter = 0;
+    dialogue.active = true;
+    dialogue.callback = cb;
+}
+
+function winGame() {
+    state = "ENDING";
+    startDialogue("SISTEMA DELETADO. Você se tornou o novo Administrador Root.");
+}
+
+// --- LOOP DO JOGO ---
+
+function loop() {
+    frame++;
     ctx.fillStyle = "#05050a";
     ctx.fillRect(0, 0, 800, 600);
 
     if (state === "INTRO") {
-        let lines = ["No ano 202X...", "O código de UNDERTALE vazou na rede da faculdade.", "A realidade virou um loop de erros.", "Um estudante entra no servidor central..."];
-        let cur = Math.floor(introTimer / 150);
-        if (cur < lines.length) drawText(lines[cur], 400, 300, "20px", "white", "center");
+        introTimer++;
+        const lines = [
+            "No ano 202X, um código proibido vazou...",
+            "UNDERTALE.EXE fundiu-se ao servidor da faculdade.",
+            "Lógica e Realidade tornaram-se instáveis.",
+            "Um estudante entra no sistema para salvar seu TCC.",
+            "Identifique-se para continuar..."
+        ];
+        let idx = Math.min(lines.length - 1, Math.floor(introTimer / 180));
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.font = "20px Courier New";
+        ctx.fillText(lines[idx], 400, 300);
+        if (introTimer > 900) state = "MENU";
     }
 
     else if (state === "MENU") {
         // Grid animado
-        ctx.strokeStyle = "#002800";
-        for(let i=0; i<800; i+=50) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke(); }
+        ctx.strokeStyle = "#003300";
+        for(let i=0; i<800; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke(); }
         
-        let glitch = Math.random() > 0.9 ? Math.random()*5 : 0;
-        drawText("SYSTEM_FAILURE", 400 + glitch, 200, "60px", "#00ff64", "center");
-        drawText(`USUÁRIO: ${playerName}_`, 400, 350, "24px", "cyan", "center");
-        drawText("[Pressione ENTER para Logar]", 400, 500, "15px", "gray", "center");
+        ctx.fillStyle = "#00ff66";
+        ctx.font = "bold 60px Courier New";
+        ctx.textAlign = "center";
+        let glitch = Math.random() > 0.95 ? (Math.random()-0.5)*10 : 0;
+        ctx.fillText("SYSTEM_FAILURE", 400 + glitch, 200);
+        
+        ctx.font = "24px Courier New";
+        ctx.fillText(`USUÁRIO: ${playerName}_`, 400, 350);
+        ctx.fillStyle = "#555";
+        ctx.font = "16px Courier New";
+        ctx.fillText("[Pressione ENTER para carregar perfil]", 400, 500);
     }
 
     else if (state === "EXPLORE") {
-        drawProf(400, 200);
-        drawStudent(playerPos.x, playerPos.y);
-        drawText("SERVIDOR PRINCIPAL - SALA DE CONTROLE", 400, 50, "20px", "#00ff64", "center");
+        if (!dialogue.active) {
+            if (keys["ArrowLeft"]) player.pos.x -= player.speed;
+            if (keys["ArrowRight"]) player.pos.x += player.speed;
+            if (keys["ArrowUp"]) player.pos.y -= player.speed;
+            if (keys["ArrowDown"]) player.pos.y += player.speed;
+        }
+
+        drawPROF(400, 200);
+        drawStudent(player.pos.x, player.pos.y);
+        
+        ctx.fillStyle = "#00ff66";
+        ctx.font = "18px Courier New";
+        ctx.textAlign = "center";
+        ctx.fillText("SALA DE CONTROLE - NÍVEL 01", 400, 50);
+
+        // Interação com PROF
+        let d = Math.hypot(player.pos.x - 400, player.pos.y - 200);
+        if (d < 60 && !player.hasRoot) {
+            player.hasRoot = true;
+            player.atk = 40;
+            startDialogue("P.R.O.F: Aluno! Use o ACESSO ROOT. O Firewall à frente é imenso!");
+        }
+
+        if (player.pos.y < 50) {
+            state = "BATTLE";
+            startDialogue("ALERTA: FIREWALL BLOQUEANDO ACESSO. INICIANDO COMBATE.");
+        }
     }
 
     else if (state === "BATTLE") {
-        // Boss
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(350, 100, 100, 100);
-        drawText("FIREWALL_CORE", 400, 80, "20px", "red", "center");
-
-        // UI
+        drawFirewall(400, 150);
+        
+        // UI de Batalha
         ctx.strokeStyle = "white";
+        ctx.lineWidth = 4;
         ctx.strokeRect(50, 350, 700, 180);
-        drawText(`${playerName.toUpperCase()}  HP: ${playerHp}/20`, 50, 330, "20px", "white");
-        drawText(`ENEMY HP: ${enemyHp}`, 750, 330, "20px", "red", "right");
+        
+        ctx.fillStyle = "white";
+        ctx.textAlign = "left";
+        ctx.font = "22px Courier New";
+        ctx.fillText(`${playerName.toUpperCase()}  HP: ${player.hp}/20`, 50, 330);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#ff3333";
+        ctx.fillText(`ENEMY HP: ${enemy.hp}`, 750, 330);
 
         const btns = ["COMPILAR", "DEBUGAR", "MEMÓRIA", "LOGOUT"];
         btns.forEach((btn, i) => {
-            let color = selectedBtn === i ? "yellow" : "white";
-            drawText(`[${btn}]`, 120 + i * 180, 560, "22px", color, "center");
+            ctx.textAlign = "center";
+            ctx.fillStyle = selectedBtn === i ? "yellow" : "white";
+            ctx.fillText(`[${btn}]`, 140 + i * 175, 560);
         });
 
-        // Alma
+        // Alma (O Cursor)
         ctx.fillStyle = "cyan";
         ctx.beginPath();
-        ctx.arc(45 + selectedBtn * 180, 552, 8, 0, Math.PI * 2);
+        ctx.arc(60 + selectedBtn * 175, 552, 8, 0, Math.PI * 2);
         ctx.fill();
     }
 
+    // Caixa de Diálogo Typewriter
     if (dialogue.active) {
         ctx.fillStyle = "black";
-        ctx.fillRect(40, 400, 720, 120);
+        ctx.fillRect(45, 355, 710, 170);
         ctx.strokeStyle = "white";
-        ctx.strokeRect(40, 400, 720, 120);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(45, 355, 710, 170);
         
         dialogue.counter = Math.min(dialogue.counter + 0.5, dialogue.text.length);
-        drawText(dialogue.text.slice(0, Math.floor(dialogue.counter)), 60, 440, "20px", "white");
-        drawText("(Aperte X para continuar)", 740, 500, "14px", "gray", "right");
+        ctx.fillStyle = "white";
+        ctx.textAlign = "left";
+        ctx.font = "20px Courier New";
+        let wrapText = dialogue.text.slice(0, Math.floor(dialogue.counter));
+        ctx.fillText(wrapText, 70, 400);
+        
+        ctx.fillStyle = "#555";
+        ctx.font = "14px Courier New";
+        ctx.fillText("(Aperte X para continuar)", 550, 510);
     }
 
     drawScanlines();
+    requestAnimationFrame(loop);
 }
 
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-gameLoop();
+loop();
 </script>
 </body>
 </html>
